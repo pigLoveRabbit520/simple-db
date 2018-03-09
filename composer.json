@@ -1,0 +1,21 @@
+{
+    "name": "salamander/simple-db",
+    "description": "a simple library to curd db",
+    "type": "library",
+    "license": "ISC",
+    "authors": [
+        {
+            "name": "salamander-mh",
+            "email": "1906747819@qq.com"
+        }
+    ],
+    "require": {
+        "php": ">=5.4.0"
+    },
+    "require": {},
+    "autoload": {
+        "psr-4": {
+            "SimpleDB\\": "src"
+        }
+    }
+}
