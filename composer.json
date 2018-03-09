@@ -9,10 +9,10 @@
             "email": "1906747819@qq.com"
         }
     ],
+    "minimum-stability": "stable",
     "require": {
         "php": ">=5.4.0"
     },
-    "require": {},
     "autoload": {
         "psr-4": {
             "SimpleDB\\": "src"
