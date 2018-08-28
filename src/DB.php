@@ -6,29 +6,38 @@
  */
 namespace SimpleDB;
 
-use SimpleDB\MySQLException;
+use SimpleDB\Exception\MySQLException;
 
 class DB
 {
     private $dsn;
+    /**
+     * @var \PDOStatement
+     */
     private $sth;
     /**
-     * @var \PDO $dbh
+     * @var \PDO
      */
     private $dbh;
     private $user;
     private $charset;
     private $password;
+    private $executeCallback;
 
     public $lastSQL = '';
 
-    public function __setup($config = array())
+    public function setup($config = array())
     {
         $this->dsn = $config['dsn'];
         $this->user = $config['username'];
         $this->password = $config['password'];
         $this->charset = $config['charset'];
         $this->connect();
+    }
+
+    public function setExecuteCallback(\Closure $callback)
+    {
+        $this->executeCallback = $callback;
     }
 
     private function connect()
@@ -40,6 +49,22 @@ class DB
             $this->dbh = new \PDO($this->dsn, $this->user,
                 $this->password, $options);
         }
+    }
+
+    /**
+     * 执行sql
+     * @param $sql
+     * @param array $parameters
+     * @throws MySQLException
+     */
+    private function execute($sql, $parameters = []) 
+    {
+        $this->lastSQL = $sql;
+        $this->sth = $this->dbh->prepare($sql);
+        if ($this->executeCallback) {
+            $this->executeCallback($sql, $parameters);
+        }
+        $this->watchException($this->sth->execute($parameters));
     }
 
     public function beginTransaction()
@@ -62,43 +87,26 @@ class DB
         return $this->dbh->commit();
     }
 
-    function watchException($execute_state)
+    function watchException($executeState)
     {
-        if(!$execute_state){
+        if(!$executeState) {
             throw new MySQLException("SQL: {$this->lastSQL}\n".$this->sth->errorInfo()[2], intval($this->sth->errorCode()));
         }
     }
 
-    /**
-     * @param $sql
-     * @param array $parameters
-     * @return array
-     * @throws MySQLException
-     */
     public function fetchAll($sql, $parameters=[])
     {
         $result = [];
-        $this->lastSQL = $sql;
-        $this->sth = $this->dbh->prepare($sql);
-        $this->watchException($this->sth->execute($parameters));
+        $this->execute($sql, $parameters);
         while($result[] = $this->sth->fetch(\PDO::FETCH_ASSOC)){ }
         array_pop($result);
         return $result;
     }
 
-    /**
-     * @param $sql
-     * @param array $parameters
-     * @param int $position
-     * @return array
-     * @throws MySQLException
-     */
     public function fetchColumnAll($sql, $parameters=[], $position=0)
     {
         $result = [];
-        $this->lastSQL = $sql;
-        $this->sth = $this->dbh->prepare($sql);
-        $this->watchException($this->sth->execute($parameters));
+        $this->execute($sql, $parameters);
         while($result[] = $this->sth->fetch(\PDO::FETCH_COLUMN, $position)){ }
         array_pop($result);
         return $result;
@@ -106,52 +114,25 @@ class DB
 
     public function exists($sql, $parameters=[])
     {
-        $this->lastSQL = $sql;
         $data = $this->fetch($sql, $parameters);
         return !empty($data);
     }
 
-    /**
-     * @param string $sql
-     * @param array $parameters
-     * @return int
-     * @throws MySQLException
-     */
     public function query($sql, $parameters=[])
     {
-        $this->lastSQL = $sql;
-        $this->sth = $this->dbh->prepare($sql);
-        $this->watchException($this->sth->execute($parameters));
+        $this->execute($sql, $parameters);
         return $this->sth->rowCount();
     }
 
-    /**
-     * @param $sql
-     * @param array $parameters
-     * @param int $type
-     * @return mixed
-     * @throws MySQLException
-     */
     public function fetch($sql, $parameters=[], $type=\PDO::FETCH_ASSOC)
     {
-        $this->lastSQL = $sql;
-        $this->sth = $this->dbh->prepare($sql);
-        $this->watchException($this->sth->execute($parameters));
+        $this->execute($sql, $parameters);
         return $this->sth->fetch($type);
     }
 
-    /**
-     * @param $sql
-     * @param array $parameters
-     * @param int $position
-     * @return mixed
-     * @throws MySQLException
-     */
     public function fetchColumn($sql, $parameters=[], $position=0)
     {
-        $this->lastSQL = $sql;
-        $this->sth = $this->dbh->prepare($sql);
-        $this->watchException($this->sth->execute($parameters));
+        $this->execute($sql, $parameters);
         return $this->sth->fetch(\PDO::FETCH_COLUMN, $position);
     }
 
@@ -161,7 +142,7 @@ class DB
         $sql = "UPDATE $table SET ";
         $fields = [];
         $pdo_parameters = [];
-        foreach ( $parameters as $field=>$value){
+        foreach ($parameters as $field=>$value) {
             $fields[] = '`'.$field.'`=:field_'.$field;
             $pdo_parameters['field_'.$field] = $value;
         }
@@ -184,27 +165,19 @@ class DB
         return $this->query($sql, $pdo_parameters);
     }
 
-    /**
-     * @param string $table
-     * @param array $parameters
-     * @return int|string
-     * @throws MySQLException
-     */
     public function insert($table, $parameters=[])
     {
         $table = $this->format_table_name($table);
         $sql = "INSERT INTO $table";
         $fields = [];
         $placeholder = [];
-        foreach ( $parameters as $field=>$value){
+        foreach ($parameters as $field => $value) {
             $placeholder[] = ':'.$field;
             $fields[] = '`'.$field.'`';
         }
         $sql .= '('.implode(",", $fields).') VALUES ('.implode(",", $placeholder).')';
 
-        $this->lastSQL = $sql;
-        $this->sth = $this->dbh->prepare($sql);
-        $this->watchException($this->sth->execute($parameters));
+        $this->execute($sql, $parameters);
         $id = $this->dbh->lastInsertId();
         if(empty($id)) {
             return $this->sth->rowCount();
@@ -216,11 +189,6 @@ class DB
     public function errorInfo()
     {
         return $this->sth->errorInfo();
-    }
-
-    public function getDBH()
-    {
-        return $this->dbh;
     }
 
     protected function format_table_name($table)
