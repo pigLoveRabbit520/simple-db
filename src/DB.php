@@ -62,7 +62,7 @@ class DB
         $this->lastSQL = $sql;
         $this->sth = $this->dbh->prepare($sql);
         if ($this->executeCallback) {
-            $this->executeCallback($sql, $parameters);
+            call_user_func_array($this->executeCallback, [$sql, $parameters]);
         }
         $this->watchException($this->sth->execute($parameters));
     }
